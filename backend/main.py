@@ -3,6 +3,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from core.orchestrator import run_agents
 
 load_dotenv()
 
@@ -75,3 +76,9 @@ def get_stock(symbol: str = "AAPL"):
         "change": float(quote.get("09. change", 0)),
         "change_percent": quote.get("10. change percent")
     }
+
+@app.get("/analyze")
+def analyze_stock(symbol: str = "AAPL", market_signal: str = "Neutral"):
+    stock_data = get_stock(symbol)
+    result = run_agents(stock_data, market_signal)
+    return result
