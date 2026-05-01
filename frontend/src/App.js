@@ -11,6 +11,7 @@ function CountUp({ target, duration = 1200 }) {
   useEffect(() => {
     let start = 0;
     const step = target / (duration / 16);
+
     const timer = setInterval(() => {
       start += step;
       if (start >= target) {
@@ -52,10 +53,10 @@ function App() {
   }, [darkMode]);
 
   const handleLearnMore = () => {
-    const aboutSection = document.getElementById("about");
-    if (aboutSection) {
-      aboutSection.scrollIntoView({ behavior: "smooth" });
-    }
+    setPage("home");
+    setTimeout(() => {
+      document.getElementById("about")?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   };
 
   const buildFallbackStock = (data, symbol) => ({
@@ -71,7 +72,8 @@ function App() {
     recommendation: {
       decision: "Live Data Only",
       confidence: 0,
-      reasoning: "The AI analysis endpoint is currently unavailable, so the app is showing the latest stock price and chart data instead."
+      reasoning:
+        "The AI analysis endpoint is currently unavailable, so the app is showing the latest stock price and chart data instead."
     }
   });
 
@@ -108,6 +110,7 @@ function App() {
       }
 
       setStock(analyzeData);
+
       setRecentSearches((prev) => {
         const updated = [symbol, ...prev.filter((s) => s !== symbol)];
         return updated.slice(0, 5);
@@ -133,6 +136,7 @@ function App() {
         }
 
         setStock(buildFallbackStock(stockData, symbol));
+
         setRecentSearches((prev) => {
           const updated = [symbol, ...prev.filter((s) => s !== symbol)];
           return updated.slice(0, 5);
@@ -224,9 +228,10 @@ function App() {
     if (riskLevel === "High") factors.push("The risk score is elevated, which suggests larger downside concern.");
     if (marketSignal === "Volatile") factors.push("Volatile market conditions can reduce confidence in short-term timing.");
     if (marketSignal === "Bearish") factors.push("Bearish market sentiment may create additional downside pressure.");
+    if (decisionText === "Live Data Only") factors.push("AI-generated risk scoring is temporarily unavailable.");
     if (factors.length === 0) factors.push("No major red flags are dominating the current setup.");
     return factors.slice(0, 4);
-  }, [isPositive, riskLevel, marketSignal]);
+  }, [isPositive, riskLevel, marketSignal, decisionText]);
 
   const opportunitySignals = useMemo(() => {
     const signals = [];
@@ -241,15 +246,20 @@ function App() {
   }, [isPositive, marketSignal, riskLevel, decisionText]);
 
   const portfolioFit = useMemo(() => {
+    if (decisionText === "Live Data Only") {
+      return "This view still helps you track price movement and chart trends while AI analysis is temporarily unavailable.";
+    }
     if (investorProfile === "Conservative") {
-      if (riskLevel === "Low") return "Suitable for conservative investors who prioritize stability and controlled risk.";
+      if (riskLevel === "Low") {
+        return "Suitable for conservative investors who prioritize stability and controlled risk.";
+      }
       return "Only a moderate fit for conservative investors because the current risk is not especially low.";
     }
     if (investorProfile === "Aggressive") {
       return "Suitable for aggressive investors who can tolerate more uncertainty for potential upside.";
     }
     return "A reasonable fit for balanced investors looking for a mix of opportunity and controlled risk.";
-  }, [investorProfile, riskLevel]);
+  }, [investorProfile, riskLevel, decisionText]);
 
   const actionPlan = useMemo(() => {
     if (decisionText === "Invest") {
@@ -264,11 +274,14 @@ function App() {
     return "Maintain the position, monitor price behavior over the next few sessions, and wait for a clearer breakout or stronger signal before changing strategy.";
   }, [decisionText]);
 
-  const whatIfCards = useMemo(() => [
-    { title: "If market turns Bullish", value: decisionText === "Hold" ? "Could shift toward Invest" : "Confidence may improve" },
-    { title: "If price drops 5%", value: riskLevel === "High" ? "Risk likely rises further" : "Would increase caution" },
-    { title: "If volatility increases", value: "Confidence may decrease and timing becomes harder" }
-  ], [decisionText, riskLevel]);
+  const whatIfCards = useMemo(
+    () => [
+      { title: "If market turns Bullish", value: decisionText === "Hold" ? "Could shift toward Invest" : "Confidence may improve" },
+      { title: "If price drops 5%", value: riskLevel === "High" ? "Risk likely rises further" : "Would increase caution" },
+      { title: "If volatility increases", value: "Confidence may decrease and timing becomes harder" }
+    ],
+    [decisionText, riskLevel]
+  );
 
   const followupAnswer = useMemo(() => {
     switch (selectedQuestion) {
@@ -289,13 +302,15 @@ function App() {
     }
   }, [selectedQuestion, riskLevel, decisionText, investorProfile]);
 
-  const displayedRiskText = viewMode === "Beginner"
-    ? stock?.risk?.analysis || ""
-    : `${stock?.risk?.analysis || ""} Current risk level is ${riskLevel}, market signal is ${marketSignal}, and recent price direction appears ${trendLabel.toLowerCase()}.`;
+  const displayedRiskText =
+    viewMode === "Beginner"
+      ? stock?.risk?.analysis || ""
+      : `${stock?.risk?.analysis || ""} Current risk level is ${riskLevel}, market signal is ${marketSignal}, and recent price direction appears ${trendLabel.toLowerCase()}.`;
 
-  const displayedRecommendationText = viewMode === "Beginner"
-    ? stock?.recommendation?.reasoning || ""
-    : `${stock?.recommendation?.reasoning || ""} The system currently leans ${decisionText.toLowerCase()} with ${confidence}% confidence for a ${investorProfile.toLowerCase()} investor profile.`;
+  const displayedRecommendationText =
+    viewMode === "Beginner"
+      ? stock?.recommendation?.reasoning || ""
+      : `${stock?.recommendation?.reasoning || ""} The system currently leans ${decisionText.toLowerCase()} with ${confidence}% confidence for a ${investorProfile.toLowerCase()} investor profile.`;
 
   return (
     <div className={`app ${darkMode ? "dark" : "light"}`}>
@@ -316,7 +331,6 @@ function App() {
             href="#about"
             onClick={(e) => {
               e.preventDefault();
-              setPage("home");
               handleLearnMore();
             }}
             className={page === "home" ? "nav-active" : ""}
@@ -445,16 +459,10 @@ function App() {
                 <div className="control-group">
                   <label>Explanation Mode</label>
                   <div className="view-toggle">
-                    <button
-                      className={viewMode === "Beginner" ? "toggle-btn active-toggle" : "toggle-btn"}
-                      onClick={() => setViewMode("Beginner")}
-                    >
+                    <button className={viewMode === "Beginner" ? "toggle-btn active-toggle" : "toggle-btn"} onClick={() => setViewMode("Beginner")}>
                       Beginner
                     </button>
-                    <button
-                      className={viewMode === "Expert" ? "toggle-btn active-toggle" : "toggle-btn"}
-                      onClick={() => setViewMode("Expert")}
-                    >
+                    <button className={viewMode === "Expert" ? "toggle-btn active-toggle" : "toggle-btn"} onClick={() => setViewMode("Expert")}>
                       Expert
                     </button>
                   </div>
