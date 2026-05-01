@@ -1,27 +1,33 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import SecurityImage from "./IMAGES/security.png";
-import StockLogo from "./IMAGES/stock.png";
 import StockChart from "./StockChart";
 import Compare from "./Compare";
 import Watchlist from "./Watchlist";
 
 function CountUp({ target, duration = 1200 }) {
   const [count, setCount] = useState(0);
+
   useEffect(() => {
     let start = 0;
     const step = target / (duration / 16);
     const timer = setInterval(() => {
       start += step;
-      if (start >= target) { setCount(target); clearInterval(timer); }
-      else setCount(Math.floor(start));
+      if (start >= target) {
+        setCount(target);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(start));
+      }
     }, 16);
+
     return () => clearInterval(timer);
   }, [target, duration]);
+
   return <span>{count}</span>;
 }
 
-const API_BASE = "https://quontro-backend-0pic.onrender.com/";
+const API_BASE = "https://quontro-backend-0pic.onrender.com";
 console.log("API_BASE =", API_BASE);
 
 function App() {
@@ -33,7 +39,6 @@ function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [history, setHistory] = useState([]);
   const [chartRange, setChartRange] = useState(30);
-  const [news, setNews] = useState([]);
   const [page, setPage] = useState("home");
   const [marketSignal, setMarketSignal] = useState("Neutral");
   const [investorProfile, setInvestorProfile] = useState("Balanced");
@@ -46,6 +51,30 @@ function App() {
     document.body.className = darkMode ? "dark" : "light";
   }, [darkMode]);
 
+  const handleLearnMore = () => {
+    const aboutSection = document.getElementById("about");
+    if (aboutSection) {
+      aboutSection.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const buildFallbackStock = (data, symbol) => ({
+    symbol: data.symbol || symbol,
+    price: data.price ?? 0,
+    change: data.change ?? 0,
+    change_percent: data.change_percent || "0%",
+    market_signal: marketSignal,
+    risk: {
+      level: "N/A",
+      analysis: "AI analysis is temporarily unavailable. Showing live stock data only."
+    },
+    recommendation: {
+      decision: "Live Data Only",
+      confidence: 0,
+      reasoning: "The AI analysis endpoint is currently unavailable, so the app is showing the latest stock price and chart data instead."
+    }
+  });
+
   const handleAnalyze = async (customSymbol = null) => {
     const rawValue = typeof customSymbol === "string" ? customSymbol : inputValue;
     const symbol = rawValue.trim().toUpperCase();
@@ -56,47 +85,71 @@ function App() {
     setSearched(true);
     setStock(null);
     setHistory([]);
-    setNews([]);
     setError("");
     setSelectedQuestion("");
 
-    setTimeout(() => {
-      fetch(`${API_BASE}/history?symbol=${symbol}`)
-        .then(r => r.json())
-        .then(d => { if (d.history) setHistory(d.history); else setHistory([]); })
-        .catch(() => setHistory([]));
-    }, 2000);
-
-    setTimeout(() => {
-      fetch(`${API_BASE}/news?symbol=${symbol}`)
-        .then(r => r.json())
-        .then(d => { if (d.news) setNews(d.news); else setNews([]); })
-        .catch(() => setNews([]));
-    }, 3000);
+    const historyPromise = fetch(`${API_BASE}/history?symbol=${symbol}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.history) setHistory(d.history);
+        else setHistory([]);
+      })
+      .catch(() => setHistory([]));
 
     try {
-      const res = await fetch(
+      const analyzeRes = await fetch(
         `${API_BASE}/analyze?symbol=${symbol}&market_signal=${marketSignal}`
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Failed to fetch stock data");
 
-      setStock(data);
-      setRecentSearches(prev => {
-        const updated = [symbol, ...prev.filter(s => s !== symbol)];
+      const analyzeData = await analyzeRes.json();
+
+      if (!analyzeRes.ok) {
+        throw new Error(analyzeData.detail || "Analyze endpoint failed");
+      }
+
+      setStock(analyzeData);
+      setRecentSearches((prev) => {
+        const updated = [symbol, ...prev.filter((s) => s !== symbol)];
         return updated.slice(0, 5);
       });
+
+      await historyPromise;
 
       setTimeout(() => {
         setLoading(false);
         setTimeout(() => {
           resultsRef.current?.scrollIntoView({ behavior: "smooth" });
         }, 100);
-      }, 1200);
+      }, 700);
+    } catch (analyzeErr) {
+      console.warn("Analyze failed, falling back to /stock:", analyzeErr.message);
 
-    } catch (err) {
-      setLoading(false);
-      setError(err.message || "Something went wrong.");
+      try {
+        const stockRes = await fetch(`${API_BASE}/stock?symbol=${symbol}`);
+        const stockData = await stockRes.json();
+
+        if (!stockRes.ok) {
+          throw new Error(stockData.detail || "Stock endpoint failed");
+        }
+
+        setStock(buildFallbackStock(stockData, symbol));
+        setRecentSearches((prev) => {
+          const updated = [symbol, ...prev.filter((s) => s !== symbol)];
+          return updated.slice(0, 5);
+        });
+
+        await historyPromise;
+
+        setTimeout(() => {
+          setLoading(false);
+          setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: "smooth" });
+          }, 100);
+        }, 700);
+      } catch (stockErr) {
+        setLoading(false);
+        setError(stockErr.message || "Failed to fetch stock data.");
+      }
     }
   };
 
@@ -121,31 +174,48 @@ function App() {
     return "";
   };
 
-  const formatVolume = (value) => {
-    if (!value) return "N/A";
-    if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-    return value;
-  };
-
   const confidence = Number(stock?.recommendation?.confidence || 0);
   const trendLabel = isPositive ? "Bullish" : "Bearish";
-  const decisionText = stock?.recommendation?.decision || "Review";
+  const decisionText = stock?.recommendation?.decision || "N/A";
   const riskLevel = stock?.risk?.level || "N/A";
 
   const marketSentiment = useMemo(() => {
-    if (marketSignal === "Bullish") return { label: "Positive", text: "The current market signal is supportive and aligns with stronger upside expectations." };
-    if (marketSignal === "Bearish") return { label: "Negative", text: "The current market signal suggests weaker sentiment and more caution in the short term." };
-    if (marketSignal === "Volatile") return { label: "Mixed / Volatile", text: "Conditions look unstable, which can increase uncertainty and reduce consistency in near-term decisions." };
-    return { label: "Neutral", text: "The market backdrop appears balanced, with no strong directional pressure dominating the current view." };
+    if (marketSignal === "Bullish") {
+      return {
+        label: "Positive",
+        text: "The current market signal is supportive and aligns with stronger upside expectations."
+      };
+    }
+    if (marketSignal === "Bearish") {
+      return {
+        label: "Negative",
+        text: "The current market signal suggests weaker sentiment and more caution in the short term."
+      };
+    }
+    if (marketSignal === "Volatile") {
+      return {
+        label: "Mixed / Volatile",
+        text: "Conditions look unstable, which can increase uncertainty and reduce consistency in near-term decisions."
+      };
+    }
+    return {
+      label: "Neutral",
+      text: "The market backdrop appears balanced, with no strong directional pressure dominating the current view."
+    };
   }, [marketSignal]);
 
   const confidenceExplanation = useMemo(() => {
-    if (confidence >= 85) return "Confidence is high because the stock signal, recent movement, and agent reasoning are relatively aligned.";
-    if (confidence >= 70) return "Confidence is moderate because the data gives a usable direction, but there is still some uncertainty in the setup.";
+    if (decisionText === "Live Data Only") {
+      return "AI confidence is unavailable right now because the app fell back to the live stock endpoint.";
+    }
+    if (confidence >= 85) {
+      return "Confidence is high because the stock signal, recent movement, and agent reasoning are relatively aligned.";
+    }
+    if (confidence >= 70) {
+      return "Confidence is moderate because the data gives a usable direction, but there is still some uncertainty in the setup.";
+    }
     return "Confidence is lower because the market context and stock behavior are mixed or less predictable right now.";
-  }, [confidence]);
+  }, [confidence, decisionText]);
 
   const riskFactors = useMemo(() => {
     const factors = [];
@@ -165,6 +235,7 @@ function App() {
     if (riskLevel === "Low") signals.push("Lower risk conditions make the setup more stable for decision-making.");
     if (decisionText === "Hold") signals.push("A hold signal suggests the stock may still be worth keeping under observation.");
     if (decisionText === "Invest") signals.push("The recommendation indicates upside potential under current conditions.");
+    if (decisionText === "Live Data Only") signals.push("Live stock data is available even though AI analysis is temporarily unavailable.");
     if (signals.length === 0) signals.push("Opportunity exists, but the current setup needs more confirmation before becoming stronger.");
     return signals.slice(0, 4);
   }, [isPositive, marketSignal, riskLevel, decisionText]);
@@ -174,29 +245,47 @@ function App() {
       if (riskLevel === "Low") return "Suitable for conservative investors who prioritize stability and controlled risk.";
       return "Only a moderate fit for conservative investors because the current risk is not especially low.";
     }
-    if (investorProfile === "Aggressive") return "Suitable for aggressive investors who can tolerate more uncertainty for potential upside.";
+    if (investorProfile === "Aggressive") {
+      return "Suitable for aggressive investors who can tolerate more uncertainty for potential upside.";
+    }
     return "A reasonable fit for balanced investors looking for a mix of opportunity and controlled risk.";
   }, [investorProfile, riskLevel]);
 
   const actionPlan = useMemo(() => {
-    if (decisionText === "Invest") return "Consider entering gradually, monitor the next few trading sessions, and watch whether the bullish case continues to strengthen.";
-    if (decisionText === "Avoid") return "Review your exposure, reduce risk if needed, and avoid waiting for confirmation if downside pressure continues to build.";
+    if (decisionText === "Invest") {
+      return "Consider entering gradually, monitor the next few trading sessions, and watch whether the bullish case continues to strengthen.";
+    }
+    if (decisionText === "Avoid") {
+      return "Review your exposure, reduce risk if needed, and avoid waiting for confirmation if downside pressure continues to build.";
+    }
+    if (decisionText === "Live Data Only") {
+      return "Use the live price and chart for now, and retry later when the AI analysis endpoint is available.";
+    }
     return "Maintain the position, monitor price behavior over the next few sessions, and wait for a clearer breakout or stronger signal before changing strategy.";
   }, [decisionText]);
 
   const whatIfCards = useMemo(() => [
     { title: "If market turns Bullish", value: decisionText === "Hold" ? "Could shift toward Invest" : "Confidence may improve" },
     { title: "If price drops 5%", value: riskLevel === "High" ? "Risk likely rises further" : "Would increase caution" },
-    { title: "If volatility increases", value: "Confidence may decrease and timing becomes harder" },
+    { title: "If volatility increases", value: "Confidence may decrease and timing becomes harder" }
   ], [decisionText, riskLevel]);
 
   const followupAnswer = useMemo(() => {
     switch (selectedQuestion) {
-      case "Why is the risk medium?": return `The risk is ${riskLevel.toLowerCase()} because the system sees a mix of caution and stability rather than a fully safe or fully dangerous setup.`;
-      case "Should I buy now or wait?": return decisionText === "Invest" ? "The AI currently leans toward investing, but entering gradually is usually safer than rushing all at once." : "The current output suggests waiting for a clearer setup before making a stronger move.";
-      case "What does hold mean?": return "Hold means keep the stock under observation without making a major change right now unless new signals appear.";
-      case "Is this good for beginners?": return investorProfile === "Conservative" || investorProfile === "Balanced" ? "Yes, this setup can work for beginners because the dashboard explains both risk and recommendation clearly." : "It may be better suited for users comfortable with more volatility and faster decisions.";
-      default: return "";
+      case "Why is the risk medium?":
+        return `The risk is ${riskLevel.toLowerCase()} because the system sees a mix of caution and stability rather than a fully safe or fully dangerous setup.`;
+      case "Should I buy now or wait?":
+        return decisionText === "Invest"
+          ? "The AI currently leans toward investing, but entering gradually is usually safer than rushing all at once."
+          : "The current output suggests waiting for a clearer setup before making a stronger move.";
+      case "What does hold mean?":
+        return "Hold means keep the stock under observation without making a major change right now unless new signals appear.";
+      case "Is this good for beginners?":
+        return investorProfile === "Conservative" || investorProfile === "Balanced"
+          ? "Yes, this setup can work for beginners because the dashboard explains both risk and recommendation clearly."
+          : "It may be better suited for users comfortable with more volatility and faster decisions.";
+      default:
+        return "";
     }
   }, [selectedQuestion, riskLevel, decisionText, investorProfile]);
 
@@ -213,7 +302,6 @@ function App() {
       <div className="bg-gradient"></div>
       <div className="bg-grid"></div>
 
-      {/* Navbar */}
       <header className="navbar">
         <div className="logo">
           <div className="logo-icon">Q</div>
@@ -224,7 +312,17 @@ function App() {
         </div>
         <nav>
           <a href="#home" onClick={() => setPage("home")} className={page === "home" ? "nav-active" : ""}>Home</a>
-          <a href="#about" onClick={(e) => { e.preventDefault(); setPage("home"); }} className={page === "home" ? "nav-active" : ""}>About</a>
+          <a
+            href="#about"
+            onClick={(e) => {
+              e.preventDefault();
+              setPage("home");
+              handleLearnMore();
+            }}
+            className={page === "home" ? "nav-active" : ""}
+          >
+            About
+          </a>
           <button className="nav-compare-btn" onClick={() => setPage("compare")}>Compare</button>
           <button className="nav-watchlist-btn" onClick={() => setPage("watchlist")}>Watchlist</button>
         </nav>
@@ -237,19 +335,20 @@ function App() {
         {page === "compare" ? (
           <Compare darkMode={darkMode} />
         ) : page === "watchlist" ? (
-          <Watchlist onNavigateHome={(symbol) => {
-            setPage("home");
-            setInputValue(symbol);
-            setTimeout(() => document.querySelector(".search-box button")?.click(), 300);
-          }} />
+          <Watchlist
+            onNavigateHome={(symbol) => {
+              setPage("home");
+              setInputValue(symbol);
+              setTimeout(() => document.querySelector(".search-box button")?.click(), 300);
+            }}
+          />
         ) : (
           <>
-            {/* Hero */}
             <section className="home" id="home">
               <div className="hero">
                 <div className="hero-left">
                   <div className="hero-badge">✦ AI-Powered Financial Platform</div>
-                  <h1 className="hero-title" style={{paddingBottom: "0.1em", overflow: "visible"}}>
+                  <h1 className="hero-title" style={{ paddingBottom: "0.1em", overflow: "visible" }}>
                     Multi-AI Financial<br />Decision Intelligence
                   </h1>
                   <p className="hero-sub">
@@ -257,8 +356,9 @@ function App() {
                     market trends, and make confident financial decisions in seconds.
                   </p>
                   <div className="hero-actions">
-                    <button className="primary-btn">Request a Demo</button>
-                    <button className="secondary-btn">Learn More ↓</button>
+                    <button className="secondary-btn" onClick={handleLearnMore}>
+                      Learn More ↓
+                    </button>
                   </div>
                   <div className="hero-stats">
                     <div className="stat"><strong>3</strong><span>AI Agents</span></div>
@@ -282,7 +382,6 @@ function App() {
               </div>
             </section>
 
-            {/* Features */}
             <section className="features" id="about">
               <div className="section-label">What We Offer</div>
               <h2>Powered by Three AI Agents</h2>
@@ -292,7 +391,7 @@ function App() {
                   { icon: "📊", title: "AI Stock Analysis", desc: "Real-time stock data with intelligent AI-driven analysis and insights." },
                   { icon: "📈", title: "Market Agent", desc: "Determines if the market signal is Positive, Neutral, or Negative." },
                   { icon: "⚠️", title: "Risk Agent", desc: "Evaluates investment risk levels with detailed watsonx.ai reasoning." },
-                  { icon: "💡", title: "Recommendation Agent", desc: "Delivers a final decision with confidence score and full explanation." },
+                  { icon: "💡", title: "Recommendation Agent", desc: "Delivers a final decision with confidence score and full explanation." }
                 ].map((f, i) => (
                   <div className="feature-card" key={i}>
                     <div className="feature-icon">{f.icon}</div>
@@ -303,7 +402,6 @@ function App() {
               </div>
             </section>
 
-            {/* CTA */}
             <section className="cta" id="contact">
               <div className="cta-inner">
                 <h2>Start Investing Smarter Today</h2>
@@ -311,7 +409,6 @@ function App() {
               </div>
             </section>
 
-            {/* Search + Controls */}
             <div className="search-wrapper">
               <div className="search-box">
                 <span className="search-icon">🔍</span>
@@ -348,8 +445,18 @@ function App() {
                 <div className="control-group">
                   <label>Explanation Mode</label>
                   <div className="view-toggle">
-                    <button className={viewMode === "Beginner" ? "toggle-btn active-toggle" : "toggle-btn"} onClick={() => setViewMode("Beginner")}>Beginner</button>
-                    <button className={viewMode === "Expert" ? "toggle-btn active-toggle" : "toggle-btn"} onClick={() => setViewMode("Expert")}>Expert</button>
+                    <button
+                      className={viewMode === "Beginner" ? "toggle-btn active-toggle" : "toggle-btn"}
+                      onClick={() => setViewMode("Beginner")}
+                    >
+                      Beginner
+                    </button>
+                    <button
+                      className={viewMode === "Expert" ? "toggle-btn active-toggle" : "toggle-btn"}
+                      onClick={() => setViewMode("Expert")}
+                    >
+                      Expert
+                    </button>
                   </div>
                 </div>
               </div>
@@ -357,8 +464,10 @@ function App() {
               {recentSearches.length > 0 && (
                 <div className="recent-searches">
                   <span>Recent:</span>
-                  {recentSearches.map(s => (
-                    <button key={s} className="recent-tag" onClick={() => handleAnalyze(s)}>{s}</button>
+                  {recentSearches.map((s) => (
+                    <button key={s} className="recent-tag" onClick={() => handleAnalyze(s)}>
+                      {s}
+                    </button>
                   ))}
                 </div>
               )}
@@ -370,22 +479,19 @@ function App() {
               <div className="loader">
                 <div className="loader-ring"></div>
                 <div className="loader-ring ring2"></div>
-                <p className="analyzing">Running AI agents on {inputValue}...</p>
+                <p className="analyzing">Running stock analysis on {inputValue}...</p>
                 <div className="agent-steps">
-                  <span className="agent-step">🛡 Risk Agent</span>
-                  <span className="agent-step">💡 Recommendation Agent</span>
-                  <span className="agent-step">📊 Compiling Results</span>
+                  <span className="agent-step">🛡 Trying AI Analysis</span>
+                  <span className="agent-step">📊 Falling back to Live Data if needed</span>
+                  <span className="agent-step">📈 Loading Price History</span>
                 </div>
               </div>
             )}
 
             {error && !loading && <div className="error-box">⚠️ {error}</div>}
 
-            {/* Results */}
             {!loading && stock && (
               <div className="results fade-in" ref={resultsRef}>
-
-                {/* Summary strip */}
                 <div className="summary-strip">
                   <div className="summary-pill"><span>Trend</span><strong>{trendLabel}</strong></div>
                   <div className="summary-pill"><span>Risk</span><strong>{riskLevel}</strong></div>
@@ -395,7 +501,6 @@ function App() {
                   <div className="summary-pill"><span>Market</span><strong>{marketSignal}</strong></div>
                 </div>
 
-                {/* Top Cards */}
                 <div className="cards-grid">
                   <div className="card glass-card price-card">
                     <div className="card-header">
@@ -426,9 +531,19 @@ function App() {
                     <div className="card-label">Risk Level</div>
                     <div className="card-value">{stock.risk?.level}</div>
                     <div className="risk-bar-wrapper">
-                      <div className={`risk-bar ${getRiskColor(stock.risk?.level)}`}
-                        style={{ width: stock.risk?.level === "Low" ? "33%" : stock.risk?.level === "Medium" ? "66%" : "100%" }}>
-                      </div>
+                      <div
+                        className={`risk-bar ${getRiskColor(stock.risk?.level)}`}
+                        style={{
+                          width:
+                            stock.risk?.level === "Low"
+                              ? "33%"
+                              : stock.risk?.level === "Medium"
+                              ? "66%"
+                              : stock.risk?.level === "High"
+                              ? "100%"
+                              : "0%"
+                        }}
+                      ></div>
                     </div>
                   </div>
 
@@ -438,8 +553,13 @@ function App() {
                     <div className="confidence-ring">
                       <svg viewBox="0 0 100 100">
                         <circle cx="50" cy="50" r="40" className="ring-bg" />
-                        <circle cx="50" cy="50" r="40" className="ring-fill"
-                          strokeDasharray={`${(confidence / 100) * 251} 251`} />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          className="ring-fill"
+                          strokeDasharray={`${(confidence / 100) * 251} 251`}
+                        />
                       </svg>
                       <div className="confidence-number"><CountUp target={confidence} />%</div>
                     </div>
@@ -453,7 +573,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Price Chart */}
                 {history.length > 0 && (
                   <div className="glass-card chart-card fade-in">
                     <div className="chart-header">
@@ -462,8 +581,14 @@ function App() {
                         <p className="chart-sub">{stock.symbol} — last {chartRange} days</p>
                       </div>
                       <div className="chart-range-btns">
-                        {[7, 14, 30].map(r => (
-                          <button key={r} className={`range-btn ${chartRange === r ? "active" : ""}`} onClick={() => setChartRange(r)}>{r}D</button>
+                        {[7, 14, 30].map((r) => (
+                          <button
+                            key={r}
+                            className={`range-btn ${chartRange === r ? "active" : ""}`}
+                            onClick={() => setChartRange(r)}
+                          >
+                            {r}D
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -471,7 +596,6 @@ function App() {
                   </div>
                 )}
 
-                {/* AI Sentiment + Confidence Explanation */}
                 <div className="two-col-grid">
                   <div className="glass-card info-pad">
                     <div className="info-head"><span>🧠</span><h3>AI Market Sentiment</h3></div>
@@ -482,13 +606,12 @@ function App() {
                     <div className="info-head"><span>📊</span><h3>Confidence Explanation</h3></div>
                     <div className="conf-bar-wrapper">
                       <span className="conf-num">{confidence}%</span>
-                      <div className="conf-bar"><div className="conf-fill" style={{width:`${confidence}%`}}></div></div>
+                      <div className="conf-bar"><div className="conf-fill" style={{ width: `${confidence}%` }}></div></div>
                     </div>
                     <p className="info-text">{confidenceExplanation}</p>
                   </div>
                 </div>
 
-                {/* Analysis Cards */}
                 <div className="analysis-grid">
                   <div className="analysis-card glass-card">
                     <div className="analysis-header">
@@ -508,7 +631,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Risk Factors + Opportunity + Portfolio Fit */}
                 <div className="three-col-grid">
                   <div className="glass-card info-pad">
                     <div className="info-head"><span>🚨</span><h3>Risk Factors</h3></div>
@@ -529,7 +651,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Action Plan + Ask the AI */}
                 <div className="two-col-grid">
                   <div className="glass-card info-pad">
                     <div className="info-head"><span>🛠</span><h3>Suggested Action Plan</h3></div>
@@ -538,19 +659,24 @@ function App() {
                   <div className="glass-card info-pad">
                     <div className="info-head"><span>💬</span><h3>Ask the AI</h3></div>
                     <div className="question-chips">
-                      {["Why is the risk medium?","Should I buy now or wait?","What does hold mean?","Is this good for beginners?"].map(q => (
-                        <button key={q} className={`question-chip ${selectedQuestion === q ? "active-question" : ""}`} onClick={() => setSelectedQuestion(q)}>{q}</button>
+                      {["Why is the risk medium?","Should I buy now or wait?","What does hold mean?","Is this good for beginners?"].map((q) => (
+                        <button
+                          key={q}
+                          className={`question-chip ${selectedQuestion === q ? "active-question" : ""}`}
+                          onClick={() => setSelectedQuestion(q)}
+                        >
+                          {q}
+                        </button>
                       ))}
                     </div>
                     {followupAnswer && <div className="question-answer">{followupAnswer}</div>}
                   </div>
                 </div>
 
-                {/* What-If Simulation */}
                 <div className="glass-card info-pad">
                   <div className="info-head"><span>🔮</span><h3>What-If Simulation</h3></div>
                   <div className="whatif-grid">
-                    {whatIfCards.map(card => (
+                    {whatIfCards.map((card) => (
                       <div key={card.title} className="whatif-card">
                         <span>{card.title}</span>
                         <strong>{card.value}</strong>
@@ -559,7 +685,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Final Decision */}
                 <div className={`decision-box glass-card ${getDecisionColor(stock.recommendation?.decision)}`}>
                   <div className="decision-left">
                     <p className="decision-label">Final AI Decision</p>
@@ -572,42 +697,6 @@ function App() {
                     <p>Confidence</p>
                   </div>
                 </div>
-
-                {/* News Feed */}
-                {news.length > 0 && (
-                  <div className="news-section fade-in">
-                    <div className="news-header">
-                      <div>
-                        <h3 className="news-title">📰 Latest News</h3>
-                        <p className="news-subtitle">Recent coverage for {stock.symbol}</p>
-                      </div>
-                      <span className="news-count">{news.length} articles</span>
-                    </div>
-                    <div className="news-list">
-                      {news.map((item, i) => (
-                        <a key={i} href={item.url} target="_blank" rel="noopener noreferrer" className="news-card glass-card">
-                          <div className="news-index">{String(i + 1).padStart(2, "0")}</div>
-                          <div className="news-card-left">
-                            <div className="news-meta">
-                              <span className="news-source">{item.source}</span>
-                              <span className="news-dot">·</span>
-                              <span className="news-date">{item.published}</span>
-                              <span className={`sentiment-badge sentiment-${item.sentiment.toLowerCase()}`}>
-                                {item.sentiment === "Bullish" ? "↑" : item.sentiment === "Bearish" ? "↓" : "→"} {item.sentiment}
-                              </span>
-                            </div>
-                            <h4 className="news-item-title">{item.title}</h4>
-                            <p className="news-summary">{item.summary}...</p>
-                          </div>
-                          <div className="news-arrow-wrapper">
-                            <span className="news-arrow-icon">↗</span>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
               </div>
             )}
           </>
