@@ -21,7 +21,7 @@ function CountUp({ target, duration = 1200 }) {
   return <span>{count}</span>;
 }
 
-const API_BASE = process.env.REACT_APP_API_URL;
+const API_BASE = "https://quontro-backend-0pic.onrender.com/";
 console.log("API_BASE =", API_BASE);
 
 function App() {
