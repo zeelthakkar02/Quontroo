@@ -1,6 +1,8 @@
 # Quontro
 
-🚀 An AI-powered financial learning and portfolio management platform developed as part of the IBM SkillBuild Program.
+🚀 **Multi-AI Financial Decision Intelligence Platform**
+
+Quontro is an AI-powered financial analysis platform developed as part of the **IBM SkillBuild Program**. The platform helps investors make smarter decisions by combining real-time stock analysis with specialized AI agents that evaluate market conditions, risk factors, and investment opportunities.
 
 ## 🌐 Live Demo
 
@@ -8,18 +10,48 @@
 
 ## 📖 Overview
 
-Quontro helps users improve financial literacy and make informed investment decisions through AI-driven insights, portfolio tracking, and educational resources. The platform is designed to simplify personal finance and investing for students and beginners.
+Quontro leverages multiple AI agents working together to provide intelligent financial insights. Users can analyze stocks, compare investment opportunities, and build personalized watchlists with AI-powered recommendations.
 
-## ✨ Features
+## ✨ Key Features
 
-- AI-powered financial guidance
-- Portfolio tracking and management
-- Investment analysis and insights
-- Personalized recommendations
-- Modern, responsive user interface
-- Educational resources for financial literacy
+### 📈 AI Stock Analysis
+- Real-time stock analysis
+- AI-generated investment insights
+- Intelligent market evaluation
+- Confidence-based recommendations
 
-## 🛠️ Tech Stack
+### 🤖 Multi-Agent Architecture
+- **Market Agent** – Analyzes market trends and sentiment
+- **Risk Agent** – Evaluates investment risk levels
+- **Recommendation Agent** – Generates final investment decisions
+
+### 📊 Stock Comparison
+- Compare up to three stocks simultaneously
+- Side-by-side analysis
+- AI-powered comparison insights
+
+### ⭐ Smart Watchlist
+- Track favorite stocks
+- Monitor investment opportunities
+- Personalized AI recommendations
+
+## 📸 Application Screenshots
+
+### 🏠 Homepage
+
+![Homepage](homepage.png)
+
+The main dashboard provides access to AI-powered stock analysis, real-time market insights, and financial decision support tools.
+
+---
+
+### 🤖 Multi-Agent Intelligence System
+
+![Multi-Agent System](about.png)
+
+Quontro's core architecture is powered by three specialized AI agents that work together to deliver comprehensive investment recommendations and risk assessments.
+
+## 🛠️ Technology Stack
 
 ### Frontend
 - React.js
@@ -30,8 +62,9 @@ Quontro helps users improve financial literacy and make informed investment deci
 - Node.js
 - Express.js
 
-### Database
-- MongoDB
+### AI & Analytics
+- IBM watsonx.ai
+- Multi-Agent Decision Framework
 
 ### Deployment
 - Vercel
@@ -69,24 +102,27 @@ npm start
 Quontroo/
 ├── frontend/
 ├── backend/
+├── homepage.png
+├── about.png
 └── README.md
 ```
 
 ## 👥 Team
 
-Developed as a collaborative project for the IBM SkillBuild Program.
+Developed collaboratively for the IBM SkillBuild Program.
 
 ## 🔗 Links
 
-- **Live Application:** http://quontro.vercel.app/
+- **Live Demo:** http://quontro.vercel.app/
 - **GitHub Repository:** https://github.com/zeelthakkar02/Quontroo
 
 ## 🎯 Future Enhancements
 
-- Advanced portfolio analytics
-- Real-time market data integration
-- Enhanced AI recommendations
-- User dashboards and reporting
+- Advanced portfolio management
+- Real-time market alerts
+- Historical trend analysis
+- Personalized investor profiles
+- Enhanced AI recommendation engine
 - Mobile application support
 
 ## 📜 License
@@ -97,4 +133,4 @@ This project is intended for educational and demonstration purposes.
 
 ### IBM SkillBuild Project
 
-Quontro was developed as part of the IBM SkillBuild Program to promote financial literacy and empower users with AI-driven financial tools.
+Built as part of the IBM SkillBuild initiative to explore AI-powered financial decision-making and intelligent investment analysis using IBM watsonx.ai technologies.
